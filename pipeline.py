@@ -152,9 +152,9 @@ def extract_frames(video_path, output_base_folder="processed-videos", desired_fp
 
     subprocess.run(command, check=True)
     
-    timestamps = extract_frame_timestamps(video_path, desired_fps)
-    frames = sorted(os.listdir(output_folder))
-    frame_timestamps = {os.path.join(output_folder, frame): timestamps[i] for i, frame in enumerate(frames)}
+    # timestamps = extract_frame_timestamps(video_path, desired_fps)
+    # frames = sorted(os.listdir(output_folder))
+    # frame_timestamps = {os.path.join(output_folder, frame): timestamps[i] for i, frame in enumerate(frames)}
     
     extracted_frame_count = len(os.listdir(output_folder))
     video_duration = get_video_duration(video_path)
@@ -375,10 +375,10 @@ def clips_to_videos(clips, extracted_fps, actual_fps, video_url, video_duration,
         output_path = os.path.join(video_output_folder, f"clip{i}.mp4")
 
         # command = f'ffmpeg -i "{video_url}" -ss {start_time} -to {end_time} -c copy "{output_path}"'
-        ommand = (
-            f'ffmpeg -i "{video_url}" -ss {start_time} -to {end_time} '
-            f'-vf "blackdetect=d=0.1:pic_th=0.98" '
-            f'-c copy "{output_path}"'
+        command = (
+            f'ffmpeg -ss {start_time} -to {end_time} -i "{video_url}" '
+            # f'-vf "blackdetect=d=0.1:pic_th=0.98" '
+            f'-c:v libx264 -y "{output_path}"'
         )
         print(f"Running command: {command}")
         result = subprocess.run(command, capture_output=True, text=True, shell=True, encoding='utf-8')
@@ -440,6 +440,4 @@ def main(video_path):
     print(f"Frames To Video Time: {clip_end-clip_start:2f}")
     
 # main("videos/Scarlett Johansson on Being a Movie Star vs. Being an Actor ｜ W Magazine.mp4")
-main("videos/Lilly Singh Fears for Her Life While Eating Spicy Wings ｜ Hot Ones.mp4")
-# test_url = "frame_00032.jpg"
-# print(extract_frame_number(test_url))
+main("videos/Zendaya Talks Euphoria Season 2, Her Iconic Looks, & Spider-Man ｜ Fan Mail ｜ InStyle.mp4")
