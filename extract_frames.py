@@ -6,6 +6,15 @@ import shutil
 import subprocess
 import json
 
+def update_status(json_file, parameter_name, parameter_value):
+    status = read_status(json_file)
+    if parameter_name in status:
+        status[parameter_name] += parameter_value
+    else:
+        status[parameter_name] = parameter_value
+    write_status(json_file, status)
+
+
 def get_video_fps(video_path):
     command = [
         'ffprobe',
@@ -77,13 +86,14 @@ def extract_frames(video_path, output_base_folder="processed-videos", desired_fp
 
     subprocess.run(command, check=True)
     
-    timestamps = extract_frame_timestamps(video_path, desired_fps)
-    frames = sorted(os.listdir(output_folder))
-    frame_timestamps = {os.path.join(output_folder, frame): timestamps[i] for i, frame in enumerate(frames)}
+    # timestamps = extract_frame_timestamps(video_path, desired_fps)
+    # frames = sorted(os.listdir(output_folder))
+    # frame_timestamps = {os.path.join(output_folder, frame): timestamps[i] for i, frame in enumerate(frames)}
     
     extracted_frame_count = len(os.listdir(output_folder))
     video_duration = get_video_duration(video_path)
     extracted_fps = extracted_frame_count / video_duration
+    update_status('stats.json', 'total_videos_processed', 1)
     return video_folder, extracted_fps, original_fps, video_duration
 
 

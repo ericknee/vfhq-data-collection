@@ -1,0 +1,307 @@
+{
+    "total_videos_processed": 37,
+    "video_duration_total": 54966.04499999999,
+    "stage_2_total": 277,
+    "stage_3_total": 55,
+    "stage_4_total": 53,
+    "final_clips_total": 16,
+    "final_clips_duration_total": 49.17194975437157,
+    "videos": {
+        "Open Thoughts with Kevin Hart": {
+            "video_duration": 2668.241,
+            "stage_2": 3,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0.33334261977637425
+        },
+        "Lilly Singh Fears for Her Life While Eating Spicy Wings \uff5c Hot Ones": {
+            "video_duration": 1367.061,
+            "stage_2": 7,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Does Emily Blunt Know Her Lines From Her Most Famous Movies\uff1f": {
+            "video_duration": 620.941,
+            "stage_2": 9,
+            "stage_3": 2,
+            "stage_4": 2,
+            "final_clips": 2,
+            "final_clips_duration": 17.669730469798665
+        },
+        "Zendaya Talks Euphoria Season 2, Her Iconic Looks, & Spider-Man \uff5c Fan Mail \uff5c InStyle": {
+            "video_duration": 511.081,
+            "stage_2": 4,
+            "stage_3": 2,
+            "stage_4": 2,
+            "final_clips": 2,
+            "final_clips_duration": 12.668674494455317
+        },
+        "A Smith Family Therapy Session \uff5c Best Shape of My Life": {
+            "video_duration": 1462.272,
+            "stage_2": 16,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Shane Dawson's Trashfire Makeup Documentary": {
+            "video_duration": 1544.221,
+            "stage_2": 0,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Billie Eilish - Behind the Miniature Outfits (\u201cWhat Was I Made For\uff1f\u201d Video)": {
+            "video_duration": 545.361,
+            "stage_2": 2,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "James Charles Does My Makeup!": {
+            "video_duration": 935.721,
+            "stage_2": 6,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Liza Koshy Breaks Down Her Favorite Snacks \uff5c Snacked": {
+            "video_duration": 520.041,
+            "stage_2": 6,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Adele Eats Spotted Dick, Cockles & 10 Other British Dishes \uff5c British Vogue": {
+            "video_duration": 625.701,
+            "stage_2": 7,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "ED SHEERAN\uff1a Sundae Conversation with Caleb Pressley": {
+            "video_duration": 423.701,
+            "stage_2": 0,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "HE'S FINALLY HERE (ft. @PewDiePie) \uff5c Trash Taste #124": {
+            "video_duration": 7652.401,
+            "stage_2": 1,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Scarlett Johansson on Being a Movie Star vs. Being an Actor \uff5c W Magazine": {
+            "video_duration": 317.441,
+            "stage_2": 2,
+            "stage_3": 5,
+            "stage_4": 3,
+            "final_clips": 3,
+            "final_clips_duration": 0
+        },
+        "How To Destroy Your NEGATIVE THOUGHTS & Achieve Anything You Want \uff5c Lilly Singh": {
+            "video_duration": 4361.881,
+            "stage_2": 65,
+            "stage_3": 40,
+            "stage_4": 40,
+            "final_clips": 3,
+            "final_clips_duration": 18.50020217034121
+        },
+        "Meet the Queens of RuPaul's Drag Race UK vs The World S2 \ud83c\udf0e": {
+            "video_duration": 1314.421,
+            "stage_2": 13,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "The Tragedy of Macbeth - Interview - Denzel Washington - Frances McDormand - Joel Coen - 4K": {
+            "video_duration": 2581.781,
+            "stage_2": 1,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Matt Damon Sweats From His Scalp While Eating Spicy Wings \uff5c Hot Ones": {
+            "video_duration": 1638.381,
+            "stage_2": 18,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "HE'S FINALLY HERE (ft": {
+            "video_duration": 0,
+            "stage_2": 0,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Markiplier and JackSepticEye Compete to Make a Game in 2 hours": {
+            "video_duration": 1326.521,
+            "stage_2": 4,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Listen before your Interview day \uff5c Law of Attraction by Oprah Winfrey \uff5c 4K": {
+            "video_duration": 437.141,
+            "stage_2": 0,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "(4K) Beyonce and Prince opening the The 46th Annual GRAMMY Awards at Staples Center": {
+            "video_duration": 323.021,
+            "stage_2": 0,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "[4K\u29f860FPS] Beyonce - Best Thing I Never Had+Interview (Live @ X-Factor France)": {
+            "video_duration": 465.781,
+            "stage_2": 4,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Robert Downey Jr. & Mark Ruffalo \uff5c Actors on Actors": {
+            "video_duration": 3005.861,
+            "stage_2": 17,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Robert Downey Jr": {
+            "video_duration": 0,
+            "stage_2": 0,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "TOP OF THE MORNING (ft. @jacksepticeye) \uff5c Trash Taste #106": {
+            "video_duration": 7440.861,
+            "stage_2": 1,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "TOP OF THE MORNING (ft": {
+            "video_duration": 0,
+            "stage_2": 0,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Yesterday \uff5c Ed Sheeran's Songwriting Competition in 4K HDR": {
+            "video_duration": 379.781,
+            "stage_2": 2,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Seth Meyers \uff5c SNL, Late Night, and a Ton of New Jokes \uff5c Mike Birbiglia's Working It Out": {
+            "video_duration": 2742.101,
+            "stage_2": 0,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "How Is Shane Dawson Allowed to be a Father\uff1f": {
+            "video_duration": 912.061,
+            "stage_2": 11,
+            "stage_3": 2,
+            "stage_4": 2,
+            "final_clips": 2,
+            "final_clips_duration": 0
+        },
+        "Workplace Diversity Training Isn\u2019t Working": {
+            "video_duration": 325.181,
+            "stage_2": 6,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Johnny Depp Fear and Loathing in Las Vegas 1998 interview AI Digital Remastered 4K": {
+            "video_duration": 325.761,
+            "stage_2": 1,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "I spent a day with LILLY SINGH": {
+            "video_duration": 1934.881,
+            "stage_2": 24,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Seth Meyers Unravels While Eating Spicy Wings \uff5c Hot Ones": {
+            "video_duration": 1553.861,
+            "stage_2": 24,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "How I met Shane Dawson!": {
+            "video_duration": 790.481,
+            "stage_2": 14,
+            "stage_3": 1,
+            "stage_4": 1,
+            "final_clips": 1,
+            "final_clips_duration": 0
+        },
+        "Elle Fanning \uff1a Life Lessons \uff5c Bazaar UK": {
+            "video_duration": 537.901,
+            "stage_2": 5,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Expose Perfectly Using False Color + GIVEAWAY": {
+            "video_duration": 530.101,
+            "stage_2": 4,
+            "stage_3": 3,
+            "stage_4": 3,
+            "final_clips": 3,
+            "final_clips_duration": 0
+        },
+        "Emily Blunt & Anne Hathaway \uff5c Actors on Actors": {
+            "video_duration": 2844.101,
+            "stage_2": 0,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        }
+    }
+}

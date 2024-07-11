@@ -164,8 +164,8 @@ def extract_frames(video_path, output_base_folder="processed-videos", desired_fp
 def sort_faces(video_folder): # video folder = processed-videos/video
     pickle_path = os.path.join(video_folder, 'tracks.pkl')
     input_folder = os.path.join(video_folder, 'frames')
-    if os.path.exists(pickle_path):
-        return load_tracks(pickle_path)
+    # if os.path.exists(pickle_path):
+    #     return load_tracks(pickle_path)
     boxCount = 0
     tracks =  defaultdict(list)
     tracker = Sort()  # Initialize the SORT tracker
@@ -207,13 +207,13 @@ def sort_faces(video_folder): # video folder = processed-videos/video
                     x1, y1, x2, y2, track_id = int(track[0]), int(track[1]), int(track[2]), int(track[3]), int(track[4])
                     img = Img(file_path, x1, x2, y1, y2)
                     tracks[track_id].append(img)
-    save_tracks(tracks, pickle_path)
+    # save_tracks(tracks, pickle_path)
     return tracks
 
 def filter_tracks(tracks):
     for track_num in range(len(tracks) - 1, -1, -1):
         length = len(tracks[track_num])
-        if length < 100:
+        if length < 50:
             print(f"TRACK {track_num} DELETED\n LENGTH {length}")
             del tracks[track_num]
         elif length > 2000:
@@ -221,7 +221,7 @@ def filter_tracks(tracks):
             print(f"TRACK {track_num} TRUNCATED")
     return tracks
 
-def verify_faces(tracks, video_folder, threshold=1.24, min_frames=100):
+def verify_faces(tracks, video_folder, threshold=1.24, min_frames=50):
     pickle_path = os.path.join(video_folder, 'updated_tracks.pkl')
     if os.path.exists(pickle_path):
         return load_tracks(pickle_path)
@@ -269,6 +269,7 @@ def verify_faces(tracks, video_folder, threshold=1.24, min_frames=100):
                 current_id = [track[i]] # new identity track
             else:
                 current_id.append(track[i])
+        if len(current_id) > min_frames: updated_tracks.append(current_id)
     save_tracks(updated_tracks, pickle_path)
     return updated_tracks
 
@@ -402,42 +403,42 @@ def main(video_path):
     sort_end = time.time()
     print(f"Bounding Boxes + Sort Time: {sort_end - sort_start:2f}")
     # Bounding Boxes + Sort Time: 1565.495366
-    filter_start = time.time()
-    filtered_tracks = filter_tracks(tracks)
-    filter_end = time.time()
-    print(f"Filter Track Time: {filter_end - filter_start:2f}")
-    stage2_clips = len(filtered_tracks)
-    print(f"\n{stage2_clips} clips after stage 2\n")
-    for track in filtered_tracks:
-        print(f"TRACK OF LENGTH {len(filtered_tracks[track])}")
+    # filter_start = time.time()
+    # filtered_tracks = filter_tracks(tracks)
+    # filter_end = time.time()
+    # print(f"Filter Track Time: {filter_end - filter_start:2f}")
+    # stage2_clips = len(filtered_tracks)
+    # print(f"\n{stage2_clips} clips after stage 2\n")
+    # for track in filtered_tracks:
+    #     print(f"TRACK OF LENGTH {len(filtered_tracks[track])}")
         
     
-    verify_start = time.time()
-    updated_tracks = verify_faces(filtered_tracks, proc_video_folder)
-    verify_end = time.time()
-    print(f"ArcFace Verification Time: {verify_end - verify_start:2f}")
-    stage3_clips = len(updated_tracks)
-    print(f"\n{stage3_clips} clips after stage 3\n")
+    # verify_start = time.time()
+    # updated_tracks = verify_faces(filtered_tracks, proc_video_folder)
+    # verify_end = time.time()
+    # print(f"ArcFace Verification Time: {verify_end - verify_start:2f}")
+    # stage3_clips = len(updated_tracks)
+    # print(f"\n{stage3_clips} clips after stage 3\n")
     
-    iqa_start = time.time()
-    final_clips = assess_clips(updated_tracks, proc_video_folder)
-    iqa_end = time.time()
-    print(f"Clip Quality Assessment Time: {iqa_end - iqa_start:2f}")
-    stage4_clips = len(final_clips)
-    print(f"\n{stage4_clips} clips after stage 4\n")
+    # iqa_start = time.time()
+    # final_clips = assess_clips(updated_tracks, proc_video_folder)
+    # iqa_end = time.time()
+    # print(f"Clip Quality Assessment Time: {iqa_end - iqa_start:2f}")
+    # stage4_clips = len(final_clips)
+    # print(f"\n{stage4_clips} clips after stage 4\n")
     
-    clip_start = time.time()
-    clips_to_videos(final_clips, extracted_fps, original_fps, video_path, video_duration, "final-clips")
-    clip_end = time.time()
-    print(f"Frames To Video Time: {clip_end-clip_start:2f}")
+    # clip_start = time.time()
+    # clips_to_videos(final_clips, extracted_fps, original_fps, video_path, video_duration, "final-clips")
+    # clip_end = time.time()
+    # print(f"Frames To Video Time: {clip_end-clip_start:2f}")
     
-    print(f"TOTAL RUNTIME: {clip_end - extract_start:2f}")
-    print(f"Extract Frame Time: {extract_end - extract_start:2f}")
-    print(f"Bounding Boxes + Sort Time: {sort_end - sort_start:2f}")
-    print(f"Filter Track Time: {filter_end - filter_start:2f}")
-    print(f"ArcFace Verification Time: {verify_end - verify_start:2f}")
-    print(f"HyperIQA Assessment Time: {iqa_end - iqa_start:2f}")
-    print(f"Frames To Video Time: {clip_end-clip_start:2f}")
+    # print(f"TOTAL RUNTIME: {clip_end - extract_start:2f}")
+    # print(f"Extract Frame Time: {extract_end - extract_start:2f}")
+    # print(f"Bounding Boxes + Sort Time: {sort_end - sort_start:2f}")
+    # print(f"Filter Track Time: {filter_end - filter_start:2f}")
+    # print(f"ArcFace Verification Time: {verify_end - verify_start:2f}")
+    # print(f"HyperIQA Assessment Time: {iqa_end - iqa_start:2f}")
+    # print(f"Frames To Video Time: {clip_end-clip_start:2f}")
     
 # main("videos/Scarlett Johansson on Being a Movie Star vs. Being an Actor ｜ W Magazine.mp4")
 main("videos/Zendaya Talks Euphoria Season 2, Her Iconic Looks, & Spider-Man ｜ Fan Mail ｜ InStyle.mp4")
