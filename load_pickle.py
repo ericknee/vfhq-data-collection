@@ -29,7 +29,6 @@ def load_tracks(file_path):
     return tracks
 
 
-
 file_path = "processed-videos/Does Emily Blunt Know Her Lines From Her Most Famous Movies？/updated_tracks.pkl"
 obj = load_tracks(file_path)
 for track in obj:

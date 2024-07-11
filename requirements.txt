@@ -1,0 +1,16 @@
+torch
+torchvision
+numpy
+Pillow
+deepface
+pytube
+opencv-python
+filterpy==1.4.5
+scikit-image==0.17.2
+lap==0.4.0
+retina-face
+isodate
+tf-keras
+google-api-python-client
+filterpy
+tensorflow-gpu
