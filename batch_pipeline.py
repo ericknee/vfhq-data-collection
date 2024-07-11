@@ -18,6 +18,16 @@ import subprocess
 import json
 import pickle
 import gc
+import math
+
+def get_max_clips(video_duration, min_value=3, max_value=10):
+    min_duration = 60         # 1 minute
+    max_duration = 5400       # 90 minutes
+    clamped_duration = max(min_duration, min(max_duration, video_duration))
+    exp_duration = math.exp(clamped_duration / 5400)
+    normalized_exp_duration = (exp_duration - math.exp(min_duration / 5400)) / (math.exp(max_duration / 5400) - math.exp(min_duration / 5400))
+    result = min_value + normalized_exp_duration * (max_value - min_value)
+    return int(result)
 
 def read_status(json_file):
     if not os.path.exists(json_file):
@@ -81,7 +91,7 @@ def get_landmarks(fa, img, image):
         return landmarks[0]  # landmarks for first detected face
     return None
 
-def get_all_landmarks(fa, images, batch_size=8):
+def get_all_landmarks(fa, images, batch_size=64):
     landmark_points = []
     for i in range(0, len(images), batch_size):
         batch_images = images[i:i + batch_size]
@@ -212,7 +222,7 @@ def extract_frames(video_path, output_base_folder="processed-videos", desired_fp
     extracted_fps = extracted_frame_count / video_duration
     return video_folder, extracted_fps, original_fps, video_duration, video_name
 
-def sort_faces(video_folder, batch_size=16, scale_factor=0.15):  # video_folder = processed-videos/video
+def sort_faces(video_folder, batch_size=128, scale_factor=0.15):  # video_folder = processed-videos/video
     all_imgs = {}
     detector = RetinaFace(gpu_id=0)
     pickle_path = os.path.join(video_folder, 'tracks.pkl')
@@ -228,12 +238,9 @@ def sort_faces(video_folder, batch_size=16, scale_factor=0.15):  # video_folder 
         start_time = time.time()
         batch_files = img_files[i:i + batch_size]
         images = [cv2.imread(file) for file in batch_files]
-
         # Scale down the images
         scaled_images = [cv2.resize(image, None, fx=scale_factor, fy=scale_factor) for image in images]
-
         batch_detections = detector(scaled_images, cv=True)
-        
 
         for file_path, detections, original_image in zip(batch_files, batch_detections, images):
             filename = os.path.basename(file_path)
@@ -272,20 +279,45 @@ def sort_faces(video_folder, batch_size=16, scale_factor=0.15):  # video_folder 
     save_tracks(all_imgs, images_path)
     return tracks, all_imgs
 
-def filter_tracks(tracks):
+def filter_tracks(tracks, extracted_fps, min_duration=4, max_duration=300):
     new_tracks = defaultdict(list)
+    additional_segments = []
+
     for track_num, track in tracks.items():
         frames = [extract_frame_number(img.url) for img in track if img is not None]
         min_frame = min(frames)
         max_frame = max(frames)
-        if max_frame - min_frame > 2000:
-            new_tracks[track_num] = track[:2000]
-        elif max_frame - min_frame >= 100:
-            # print(f"Keeping track {track_num} with length {max_frame - min_frame}")
+        track_length = max_frame - min_frame
+
+        if track_length > max_duration * extracted_fps:
+            num_segments = track_length // (max_duration * extracted_fps)
+            remainder = track_length % (max_duration * extracted_fps)
+
+            for i in range(num_segments):
+                start_frame = min_frame + i * max_duration * extracted_fps
+                end_frame = start_frame + max_duration * extracted_fps
+                segment = [img for img in track if start_frame <= extract_frame_number(img.url) < end_frame]
+                if i == 0:
+                    new_tracks[track_num] = segment
+                else:
+                    additional_segments.append((track_num, segment))
+
+            if remainder >= min_duration * extracted_fps:
+                start_frame = min_frame + num_segments * max_duration * extracted_fps
+                end_frame = max_frame
+                segment = [img for img in track if start_frame <= extract_frame_number(img.url) < end_frame]
+                additional_segments.append((track_num, segment))
+        elif track_length >= min_duration * extracted_fps:
             new_tracks[track_num] = track
+
+    # Add additional segments with new track numbers
+    for i, (original_track_num, segment) in enumerate(additional_segments, start=1):
+        new_track_num = f"{original_track_num}_{i}"
+        new_tracks[new_track_num] = segment
+
     return new_tracks
 
-def verify_faces(tracks, all_images, video_folder, threshold=1.24, min_frames=100, batch_size=16):
+def verify_faces(tracks, all_images, video_folder, threshold=1.24, min_frames=100, batch_size=64):
     pickle_path = os.path.join(video_folder, 'updated_tracks.pkl')
     if os.path.exists(pickle_path):
         return load_tracks(pickle_path)
@@ -339,7 +371,7 @@ def verify_faces(tracks, all_images, video_folder, threshold=1.24, min_frames=10
                 continue
 
         current_id = [track[0]]  # jpgs of same identity
-        print("LENGTH", len(features), len(track))
+        # print("LENGTH", len(features), len(track))
         for i in range(1, len(features)):
             if features[i] is None or features[i - 1] is None:
                 if len(current_id) >= min_frames: updated_tracks.append(current_id)
@@ -347,7 +379,6 @@ def verify_faces(tracks, all_images, video_folder, threshold=1.24, min_frames=10
                 continue
 
             sim = l2_similarity(np.array(features[i - 1][0].get('embedding')), np.array(features[i][0].get('embedding')))
-
             if sim > threshold:
                 # print(f"ARCFACE SPLIT: {track[i - 1].url} - {track[i].url}")
                 if len(current_id) >= min_frames: updated_tracks.append(current_id)
@@ -358,7 +389,7 @@ def verify_faces(tracks, all_images, video_folder, threshold=1.24, min_frames=10
     save_tracks(updated_tracks, pickle_path)
     return updated_tracks
 
-def assess_clips(tracks, video_folder, frame_threshold=42, clip_threshold=45, alpha=0.5, beta=0.2, hyper_batch_size=8):
+def assess_clips(tracks, video_folder, frame_threshold=42, clip_threshold=45, alpha=0.5, beta=0.2, hyper_batch_size=64):
     pickle_path = os.path.join(video_folder, 'urls.pkl')
     if os.path.exists(pickle_path):
         return load_tracks(pickle_path)
@@ -485,36 +516,37 @@ def clips_to_videos(clips, extracted_fps, actual_fps, video_url, video_duration,
     update_status('stats.json', video_name, 'final_clips_duration', clip_duration)
 
 def main(video_path):
-    # 11:14 minute video - 1099.239151 seconds = 18 minutes frame extraction time
+    # Stage 1 - Extract frames
     extract_start = time.time()
     proc_video_folder, extracted_fps, original_fps, video_duration, video_name = extract_frames(video_path)
     extract_end = time.time()
     print(f"Extract Frame Time: {extract_end - extract_start:2f}")
     update_status('stats.json', video_name, 'video_duration', video_duration)
     
+    # Stage 2 - RetinaFace + SORT
     sort_start = time.time()
     tracks, all_images = sort_faces(proc_video_folder)
     sort_end = time.time()
     print(f"Bounding Boxes + Sort Time: {sort_end - sort_start:2f}")
-    filter_start = time.time()
-    filtered_tracks = filter_tracks(tracks)
-    filter_end = time.time()
-    print(f"Filter Track Time: {filter_end - filter_start:2f}")
+    filtered_tracks = filter_tracks(tracks, extracted_fps)
     stage2_clips = len(filtered_tracks)
     update_status('stats.json', video_name, 'stage_2', stage2_clips)
     print(f"\n{stage2_clips} clips after stage 2\n")
     
+    # Stage 3 - ArcFace
     verify_start = time.time()
-    updated_tracks = verify_faces(filtered_tracks, all_images, proc_video_folder)
+    updated_tracks = verify_faces(filtered_tracks, all_images, proc_video_folder, min_frames=4 * extracted_fps)
     verify_end = time.time()
     print(f"ArcFace Verification Time: {verify_end - verify_start:2f}")
     stage3_clips = len(updated_tracks)
     update_status('stats.json', video_name, 'stage_3', stage3_clips)
     print(f"\n{stage3_clips} clips after stage 3\n")
     
+    # Stage 4 - HyperIQA + Landmark Motion Tracking
     iqa_start = time.time()
     final_clips = assess_clips(updated_tracks, proc_video_folder)
     iqa_end = time.time()
+    num_clips = get_max_clips(video_duration)
     top3_clips = final_clips[:3]
     print(f"Clip Quality Assessment Time: {iqa_end - iqa_start:2f}")
     stage4_clips = len(final_clips)
@@ -526,17 +558,14 @@ def main(video_path):
     gc.collect()
     
     clip_start = time.time()
-    # clips_to_videos(top3_clips, extracted_fps, original_fps, video_path, video_duration, "final-clips", video_name)
+    clips_to_videos(top3_clips, extracted_fps, original_fps, video_path, video_duration, "final-clips", video_name)
     clip_end = time.time()
-    print(f"Frames To Video Time: {clip_end-clip_start:2f}")
-    
-    print(f"TOTAL RUNTIME: {clip_end - extract_start:2f}")
     print(f"Extract Frame Time: {extract_end - extract_start:2f}")
     print(f"Bounding Boxes + Sort Time: {sort_end - sort_start:2f}")
-    print(f"Filter Track Time: {filter_end - filter_start:2f}")
     print(f"ArcFace Verification Time: {verify_end - verify_start:2f}")
     print(f"Image Quality Assessment Time: {iqa_end - iqa_start:2f}")
     print(f"Frames To Video Time: {clip_end-clip_start:2f}")
+    print(f"TOTAL RUNTIME: {clip_end - extract_start:2f}")
 
 def process_directory(videos_dir='videos', processed_videos_dir='processed-videos'):
     for video_file in os.listdir(videos_dir):
@@ -545,7 +574,6 @@ def process_directory(videos_dir='videos', processed_videos_dir='processed-video
             video_name = os.path.splitext(video_file)[0]
             processed_video_folder = os.path.join(processed_videos_dir, video_name)
             frames_folder = os.path.join(processed_video_folder, 'frames')
-
             # Check if the processed video directory and frames subdirectory exist and are not empty
             if os.path.isdir(processed_video_folder) and os.path.isdir(frames_folder) and os.listdir(frames_folder):
                 main(video_path)
@@ -559,4 +587,6 @@ def process_directory(videos_dir='videos', processed_videos_dir='processed-video
 # main('videos/Zendaya Talks Euphoria Season 2, Her Iconic Looks, & Spider-Man ｜ Fan Mail ｜ InStyle.mp4')
 # main('videos/A Smith Family Therapy Session ｜ Best Shape of My Life.mp4')
 # main('videos/Elle Fanning ： Life Lessons ｜ Bazaar UK.mp4')
-process_directory()
+# main('videos/Why YouTube\'s Biggest Star Quit (Liza Koshy interview).mp4')
+main('videos/We Appraised JAY LENO\'s Car Collection (185 cars!).mp4')
+# process_directory()

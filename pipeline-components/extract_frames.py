@@ -14,7 +14,6 @@ def update_status(json_file, parameter_name, parameter_value):
         status[parameter_name] = parameter_value
     write_status(json_file, status)
 
-
 def get_video_fps(video_path):
     command = [
         'ffprobe',
@@ -96,7 +95,6 @@ def extract_frames(video_path, output_base_folder="processed-videos", desired_fp
     update_status('stats.json', 'total_videos_processed', 1)
     return video_folder, extracted_fps, original_fps, video_duration
 
-
 video_folder = "videos"
 for file_name in os.listdir(video_folder):
     if file_name.endswith(".mp4"):
@@ -112,4 +110,3 @@ for file_name in os.listdir(video_folder):
                 print(f"Frame: {frame_path}, Timestamp: {timestamp} seconds")
         except Exception as e:
             print(f"Error processing video {video_path}: {e}")
-

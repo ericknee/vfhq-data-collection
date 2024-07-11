@@ -1,15 +1,15 @@
 {
-    "total_videos_processed": 37,
-    "video_duration_total": 54966.04499999999,
-    "stage_2_total": 277,
-    "stage_3_total": 55,
-    "stage_4_total": 53,
-    "final_clips_total": 16,
-    "final_clips_duration_total": 49.17194975437157,
+    "total_videos_processed": 43,
+    "video_duration_total": 63443.67099999999,
+    "stage_2_total": 365,
+    "stage_3_total": 120,
+    "stage_4_total": 106,
+    "final_clips_total": 28,
+    "final_clips_duration_total": 99.67157144222121,
     "videos": {
         "Open Thoughts with Kevin Hart": {
             "video_duration": 2668.241,
-            "stage_2": 3,
+            "stage_2": 12,
             "stage_3": 0,
             "stage_4": 0,
             "final_clips": 0,
@@ -297,11 +297,59 @@
         },
         "Emily Blunt & Anne Hathaway \uff5c Actors on Actors": {
             "video_duration": 2844.101,
-            "stage_2": 0,
+            "stage_2": 24,
+            "stage_3": 1,
+            "stage_4": 1,
+            "final_clips": 1,
+            "final_clips_duration": 0
+        },
+        "THE GARFIELD MOVIE interviews with Chris Pratt, Samuel L Jackson, Jim Davis, director Mark Dindal 4K": {
+            "video_duration": 1370.861,
+            "stage_2": 8,
+            "stage_3": 15,
+            "stage_4": 3,
+            "final_clips": 3,
+            "final_clips_duration": 0
+        },
+        "DRAKE\uff1a Sundae Conversation with Caleb Pressley": {
+            "video_duration": 681.841,
+            "stage_2": 4,
             "stage_3": 0,
             "stage_4": 0,
             "final_clips": 0,
             "final_clips_duration": 0
+        },
+        "Reading Brutal Hate Comments In ASMR \uff5c Jeffree Star": {
+            "video_duration": 1089.181,
+            "stage_2": 2,
+            "stage_3": 3,
+            "stage_4": 3,
+            "final_clips": 3,
+            "final_clips_duration": 0
+        },
+        "Bella Hadid Goes Sneaker Shopping With Complex": {
+            "video_duration": 465.281,
+            "stage_2": 3,
+            "stage_3": 0,
+            "stage_4": 0,
+            "final_clips": 0,
+            "final_clips_duration": 0
+        },
+        "Why YouTube's Biggest Star Quit (Liza Koshy interview)": {
+            "video_duration": 2887.981,
+            "stage_2": 32,
+            "stage_3": 2,
+            "stage_4": 2,
+            "final_clips": 2,
+            "final_clips_duration": 35.16643530701731
+        },
+        "We Appraised JAY LENO's Car Collection (185 cars!)": {
+            "video_duration": 1982.481,
+            "stage_2": 6,
+            "stage_3": 44,
+            "stage_4": 44,
+            "final_clips": 3,
+            "final_clips_duration": 15.33318638083233
         }
     }
 }
