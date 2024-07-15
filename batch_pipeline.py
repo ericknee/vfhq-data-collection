@@ -19,35 +19,78 @@ import json
 import pickle
 import gc
 import math
+from statistics import mode
 
-def get_max_clips(video_duration, min_value=3, max_value=10):
-    min_duration = 60         # 1 minute
-    max_duration = 5400       # 90 minutes
-    clamped_duration = max(min_duration, min(max_duration, video_duration))
-    exp_duration = math.exp(clamped_duration / 5400)
-    normalized_exp_duration = (exp_duration - math.exp(min_duration / 5400)) / (math.exp(max_duration / 5400) - math.exp(min_duration / 5400))
-    result = min_value + normalized_exp_duration * (max_value - min_value)
-    return int(result)
+def find_nearest_keyframe(video_path, timestamp, forward=True):
+    if forward:
+        interval = f"{timestamp}%+5"  # Search from the timestamp forward by 10 seconds
+    else:
+        interval = f"{timestamp-5}%{timestamp}"  # Search 10 seconds before the timestamp
+    
+    command = [ # extract keyframes w/ timestamp
+        'ffprobe',
+        '-v', 'error',
+        '-select_streams', 'v:0',
+        '-show_entries', 'frame=pkt_pts_time',
+        '-read_intervals', interval,
+        '-print_format', 'json',
+        '-skip_frame', 'nokey',
+        video_path
+    ]
+    # Run the ffprobe command
+    result = subprocess.run(command, capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        raise RuntimeError(f"ffprobe error: {result.stderr}")
+    
+    # Parse the ffprobe output
+    ffprobe_output = json.loads(result.stdout)
+    
+    if 'frames' not in ffprobe_output:
+        raise ValueError("No keyframes found")
+
+    keyframes = [float(frame['pkt_pts_time']) for frame in ffprobe_output['frames']]
+    for keyframe in keyframes:
+        print(keyframe)
+    print(interval)
+    # Find the nearest keyframe
+    nearest_keyframe = None
+    if forward:
+        for keyframe in keyframes:
+            if keyframe >= timestamp:
+                nearest_keyframe = keyframe
+                break
+    else:
+        for keyframe in reversed(keyframes):
+            if keyframe <= timestamp:
+                nearest_keyframe = keyframe
+                break
+
+    if nearest_keyframe is None:
+        raise ValueError("No valid keyframe found in the specified direction")
+
+    return nearest_keyframe
 
 def read_status(json_file):
-    if not os.path.exists(json_file):
-        return {
-            "total_videos_processed": 0,
-            "video_duration_total": 0,
-            "stage_2_total": 0,
-            "stage_3_total": 0,
-            "stage_4_total": 0,
-            "final_clips_total": 0,
-            "final_clips_duration_total": 0,
-            "videos": {}
-        }
     with open(json_file, 'r') as file:
         return json.load(file)
 
 def write_status(json_file, status):
     with open(json_file, 'w') as file:
         json.dump(status, file, indent=4)
-        
+
+def update_traits(file, video_name, age, gender, race)
+    status = read_status(json_file)
+    videos = status["videos"]
+    if video_name not in videos:
+        status['total_videos'] += 1
+    videos[video_name] = {
+        'age': age,
+        'gender': gender,
+        'race': race
+    }
+    write_status(file, status)
+    
 def update_status(json_file, video_name, parameter_name, parameter_value):
     status = read_status(json_file)
     videos = status["videos"]
@@ -62,10 +105,7 @@ def update_status(json_file, video_name, parameter_name, parameter_value):
             "final_clips": 0,
             "final_clips_duration": 0
         }
-
-    # Update the specific video's parameter
     video_entry = videos[video_name]
-
     # Adjust totals before updating the video's parameter
     if parameter_name in video_entry:
         current_value = video_entry[parameter_name]
@@ -222,6 +262,16 @@ def extract_frames(video_path, output_base_folder="processed-videos", desired_fp
     extracted_fps = extracted_frame_count / video_duration
     return video_folder, extracted_fps, original_fps, video_duration, video_name
 
+def get_max_clips(video_duration, min_value=3, max_value=10):
+    min_duration = 60         # 1 minute
+    max_duration = 5400       # 90 minutes
+    clamped_duration = max(min_duration, min(max_duration, video_duration))
+    exp_duration = math.exp(clamped_duration / 5400)
+    normalized_exp_duration = (exp_duration - math.exp(min_duration / 5400)) / (math.exp(max_duration / 5400) - math.exp(min_duration / 5400))
+    result = min_value + normalized_exp_duration * (max_value - min_value)
+    # ['0:3', '60:3', '300:3', '600:3', '1200:3', '1800:4', '2400:5', '3000:6', '3600:6', '4200:7', '4800:8', '5400:10']
+    return int(result)
+
 def sort_faces(video_folder, batch_size=128, scale_factor=0.15):  # video_folder = processed-videos/video
     all_imgs = {}
     detector = RetinaFace(gpu_id=0)
@@ -290,7 +340,7 @@ def filter_tracks(tracks, extracted_fps, min_duration=4, max_duration=300):
         track_length = max_frame - min_frame
 
         if track_length > max_duration * extracted_fps:
-            num_segments = track_length // (max_duration * extracted_fps)
+            num_segments = int(track_length // (max_duration * extracted_fps))
             remainder = track_length % (max_duration * extracted_fps)
 
             for i in range(num_segments):
@@ -379,6 +429,7 @@ def verify_faces(tracks, all_images, video_folder, threshold=1.24, min_frames=10
                 continue
 
             sim = l2_similarity(np.array(features[i - 1][0].get('embedding')), np.array(features[i][0].get('embedding')))
+            print(sim, extract_frame_number(track[i - 1].url), extract_frame_number(track[i].url))
             if sim > threshold:
                 # print(f"ARCFACE SPLIT: {track[i - 1].url} - {track[i].url}")
                 if len(current_id) >= min_frames: updated_tracks.append(current_id)
@@ -443,7 +494,7 @@ def assess_clips(tracks, video_folder, frame_threshold=42, clip_threshold=45, al
             track_items += 1
             if score < 0:
                 low_score_count += 3
-            elif score < frame_threshold: # count consecutive subpar frames
+            elif score < frame_threshold or score < 0: # count consecutive subpar frames
                 low_score_count += 1
                 track_buffer += score
             else:
@@ -479,13 +530,33 @@ def assess_clips(tracks, video_folder, frame_threshold=42, clip_threshold=45, al
     save_tracks(final_urls, pickle_path)
     return final_urls
 
+def analyze_traits(clips, video_name):
+    total_start = time.time()
+    images = [cv2.imread(clip[0]) for clip in clips]
+    age, gender, race = [], [], []
+    for image in images:
+        # print(clip)
+        start = time.time()
+        objs = DeepFace.analyze(
+            img_path = image,
+            actions = ['age', 'gender', 'race']
+        )
+        end = time.time()
+        print("CLIP ANALYZE TIME:", end - start)
+        age.append(objs[0]['age'])
+        gender.append(objs[0]['dominant_gender'])
+        race.append(objs[0]['dominant_race'])
+        return objs
+    update_status()
+    print("Total analyzing time:", time.time() - total_start)
+
 def clips_to_videos(clips, extracted_fps, actual_fps, video_url, video_duration, output_base_path, video_name):
     clip_duration = 0
     # clips = [[clip1 jpgs], [clip2 jpgs], [clip3 jpgs], . . . ]
     video_name = os.path.basename(video_url).split('.')[0]
     video_output_folder = os.path.join(output_base_path, video_name)
     os.makedirs(video_output_folder, exist_ok=True)
-    if os.listdir(video_output_folder):
+    if len(os.listdir(video_output_folder)) == len(clips):
         print("CLIPS ALREADY DOWNLOADED")
         return
     for i, clip in enumerate(clips):
@@ -499,13 +570,20 @@ def clips_to_videos(clips, extracted_fps, actual_fps, video_url, video_duration,
         end_time = min(end_frame / extracted_fps, video_duration)
         clip_duration += end_time - start_time
         
+        start_time = find_nearest_keyframe(video_url, start_time, True) # forward = True
+        end_time = find_nearest_keyframe(video_url, end_time, False) # forward = False
+
+        print(start_time)
+        print(end_time)
+        
         print(f"[START TIME, END TIME] = [{start_time}, {end_time}]")
-        output_path = os.path.join(video_output_folder, f"clip{i}.mp4")
+        output_path = os.path.join(video_output_folder, f"{video_name}_clip{i}.mp4")
 
         command = (
-            f'ffmpeg -y -ss {start_time} -to {end_time} -i "{video_url}" '
-            f'-c:v libx264 "{output_path}"'
+            f'ffmpeg -y -ss {start_time} -i "{video_url}" -t {end_time} '
+            f'-c copy -copyts "{output_path}"'
         )
+
         print(f"Running command: {command}")
         result = subprocess.run(command, capture_output=True, text=True, shell=True, encoding='utf-8')
         print(f"FFmpeg output: {result.stdout}")
@@ -547,18 +625,19 @@ def main(video_path):
     final_clips = assess_clips(updated_tracks, proc_video_folder)
     iqa_end = time.time()
     num_clips = get_max_clips(video_duration)
-    top3_clips = final_clips[:3]
+    top_clips = final_clips[:num_clips]
     print(f"Clip Quality Assessment Time: {iqa_end - iqa_start:2f}")
     stage4_clips = len(final_clips)
     update_status('stats.json', video_name, 'stage_4', stage4_clips)
-    update_status('stats.json', video_name, 'final_clips', len(top3_clips))
+    update_status('stats.json', video_name, 'final_clips', len(top_clips))
     print(f"\n{stage4_clips} clips after stage 4\n")
     
     del proc_video_folder, tracks, all_images, filtered_tracks, updated_tracks, final_clips
     gc.collect()
     
+    analyze_traits(top_clips, video_name)
     clip_start = time.time()
-    clips_to_videos(top3_clips, extracted_fps, original_fps, video_path, video_duration, "final-clips", video_name)
+    clips_to_videos(top_clips, extracted_fps, original_fps, video_path, video_duration, "final-clips", video_name)
     clip_end = time.time()
     print(f"Extract Frame Time: {extract_end - extract_start:2f}")
     print(f"Bounding Boxes + Sort Time: {sort_end - sort_start:2f}")
@@ -574,19 +653,16 @@ def process_directory(videos_dir='videos', processed_videos_dir='processed-video
             video_name = os.path.splitext(video_file)[0]
             processed_video_folder = os.path.join(processed_videos_dir, video_name)
             frames_folder = os.path.join(processed_video_folder, 'frames')
-            # Check if the processed video directory and frames subdirectory exist and are not empty
-            if os.path.isdir(processed_video_folder) and os.path.isdir(frames_folder) and os.listdir(frames_folder):
-                main(video_path)
+            main(video_path)
 
 # main("videos/Scarlett Johansson on Being a Movie Star vs. Being an Actor ｜ W Magazine.mp4")
 # main("videos/DRAKE： Sundae Conversation with Caleb Pressley.mp4")
-# main("videos/Does Emily Blunt Know Her Lines From Her Most Famous Movies？.mp4")
+main("videos/Does Emily Blunt Know Her Lines From Her Most Famous Movies？.mp4")
 # main("videos/THE GARFIELD MOVIE interviews with Chris Pratt, Samuel L Jackson, Jim Davis, director Mark Dindal 4K.mp4")
 # main("videos/Open Thoughts with Kevin Hart.mp4")
 # main('videos/Lilly Singh Fears for Her Life While Eating Spicy Wings ｜ Hot Ones.mp4')
 # main('videos/Zendaya Talks Euphoria Season 2, Her Iconic Looks, & Spider-Man ｜ Fan Mail ｜ InStyle.mp4')
 # main('videos/A Smith Family Therapy Session ｜ Best Shape of My Life.mp4')
-# main('videos/Elle Fanning ： Life Lessons ｜ Bazaar UK.mp4')
 # main('videos/Why YouTube\'s Biggest Star Quit (Liza Koshy interview).mp4')
-main('videos/We Appraised JAY LENO\'s Car Collection (185 cars!).mp4')
+# main('videos/We Appraised JAY LENO\'s Car Collection (185 cars!).mp4')
 # process_directory()
