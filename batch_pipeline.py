@@ -10,7 +10,7 @@ from PIL import Image
 import tensorflow as tf
 import torch
 import torchvision
-import models
+import hyperIQA_models
 import re
 import moviepy.editor as mp
 import face_alignment
@@ -20,56 +20,10 @@ import pickle
 import gc
 import math
 from statistics import mode
-
-def find_nearest_keyframe(video_path, timestamp, forward=True):
-    if forward:
-        interval = f"{timestamp}%+5"  # Search from the timestamp forward by 10 seconds
-    else:
-        interval = f"{timestamp-5}%{timestamp}"  # Search 10 seconds before the timestamp
-    
-    command = [ # extract keyframes w/ timestamp
-        'ffprobe',
-        '-v', 'error',
-        '-select_streams', 'v:0',
-        '-show_entries', 'frame=pkt_pts_time',
-        '-read_intervals', interval,
-        '-print_format', 'json',
-        '-skip_frame', 'nokey',
-        video_path
-    ]
-    # Run the ffprobe command
-    result = subprocess.run(command, capture_output=True, text=True)
-    
-    if result.returncode != 0:
-        raise RuntimeError(f"ffprobe error: {result.stderr}")
-    
-    # Parse the ffprobe output
-    ffprobe_output = json.loads(result.stdout)
-    
-    if 'frames' not in ffprobe_output:
-        raise ValueError("No keyframes found")
-
-    keyframes = [float(frame['pkt_pts_time']) for frame in ffprobe_output['frames']]
-    for keyframe in keyframes:
-        print(keyframe)
-    print(interval)
-    # Find the nearest keyframe
-    nearest_keyframe = None
-    if forward:
-        for keyframe in keyframes:
-            if keyframe >= timestamp:
-                nearest_keyframe = keyframe
-                break
-    else:
-        for keyframe in reversed(keyframes):
-            if keyframe <= timestamp:
-                nearest_keyframe = keyframe
-                break
-
-    if nearest_keyframe is None:
-        raise ValueError("No valid keyframe found in the specified direction")
-
-    return nearest_keyframe
+from transnetv2 import TransNetV2
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 def read_status(json_file):
     with open(json_file, 'r') as file:
@@ -79,22 +33,25 @@ def write_status(json_file, status):
     with open(json_file, 'w') as file:
         json.dump(status, file, indent=4)
 
-def update_traits(file, video_name, age, gender, race)
-    status = read_status(json_file)
+def update_traits(video_name, age, gender, race):
+    status = read_status('trait_data.json')
     videos = status["videos"]
     if video_name not in videos:
-        status['total_videos'] += 1
-    videos[video_name] = {
-        'age': age,
-        'gender': gender,
-        'race': race
-    }
-    write_status(file, status)
+        status['total_clips'] += 1
+        videos[video_name] = {
+            'age': 0,
+            'gender': '',
+            'race': ''
+        }
+    video_entry = videos[video_name]
+    video_entry['age'] = age
+    video_entry['gender'] = gender
+    video_entry['race'] = race
+    write_status('trait_data.json', status)
     
 def update_status(json_file, video_name, parameter_name, parameter_value):
     status = read_status(json_file)
     videos = status["videos"]
-
     if video_name not in videos:
         status["total_videos_processed"] += 1
         videos[video_name] = {
@@ -115,14 +72,20 @@ def update_status(json_file, video_name, parameter_name, parameter_value):
     else:
         video_entry[parameter_name] = parameter_value
         status[f"{parameter_name}_total"] += parameter_value
-
-    # # If updating final_clips or video_duration, also adjust the totals
-    # if parameter_name == "final_clips":
-    #     status["final_clips_total"] += parameter_value - current_value
-    # elif parameter_name == "video_duration":
-    #     status["video_duration_total"] += parameter_value - current_value
-
     write_status(json_file, status)
+
+def detect_objects(occ_model, frame):
+    boxes = []
+    results = occ_model(frame)
+    bounding_boxes = results.xyxy[0].cpu().numpy()
+    for box in bounding_boxes:
+        xmin, ymin, xmax, ymax, confidence, class_id = box[:6]
+        label = occ_model.names[int(class_id)]
+        # print(f"Class ID: {class_id}, Label: {label}, Confidence: {confidence}")
+        # print(f"Bounding box: ({xmin}, {ymin}) to ({xmax}, {ymax})")
+        if confidence > 0:
+            boxes.append((label, xmin, ymin, xmax, ymax, confidence, class_id))
+    return boxes
 
 def get_landmarks(fa, img, image):
     bbox = np.array([img.x1, img.y1, img.x2, img.y2])
@@ -131,7 +94,7 @@ def get_landmarks(fa, img, image):
         return landmarks[0]  # landmarks for first detected face
     return None
 
-def get_all_landmarks(fa, images, batch_size=64):
+def get_all_landmarks(fa, images, batch_size=128):
     landmark_points = []
     for i in range(0, len(images), batch_size):
         batch_images = images[i:i + batch_size]
@@ -139,7 +102,7 @@ def get_all_landmarks(fa, images, batch_size=64):
         for img, image in zip(batch_images, loaded_images):
             landmarks = get_landmarks(fa, img, image) # img = object, image = loaded image
             if landmarks is not None:
-                landmark_points.extend(landmarks)
+                landmark_points.append(landmarks)
     return landmark_points
             
 def calculate_motion(landmarks):
@@ -154,6 +117,26 @@ def calculate_motion(landmarks):
     total /= (N * 98)
     return 0.25 * total + 42.5
 
+def visualize_landmarks(images, landmarks, output_folder):
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    for img, landmark_set in zip(images, landmarks):
+        image_path = img.url
+        image = cv2.imread(image_path)
+        
+        if image is None:
+            print(f"Failed to load image: {image_path}")
+            continue
+        for point in landmark_set:
+        # print(f"Processing point: {point} of type {type(point)}")
+            x, y = int(point[0]), int(point[1])
+            cv2.circle(image, (x, y), 2, (0, 255, 0), -1)
+        
+        # Save the image with landmarks
+        output_path = os.path.join(output_folder, os.path.basename(image_path))
+        cv2.imwrite(output_path, image)
+        print(f"Saved landmark visualization to {output_path}")
 class Img:
     def __init__(self, url, x1, x2, y1, y2):
         self.url = url
@@ -234,6 +217,41 @@ def get_video_duration(video_path):
     duration = float(result.stdout.strip())
     return duration
 
+def resize_clips(clips, scale_factor=0.15, max_workers=8):
+    def resize_image(image_path, scale_factor):
+        image = cv2.imread(image_path)
+        if image is not None:
+            original_height, original_width = image.shape[:2]
+            width = int(original_width * scale_factor)
+            height = int(original_height * scale_factor)
+            new_dimensions = (width, height)
+            scaled_image = cv2.resize(image, new_dimensions)
+            return (scaled_image, scale_factor, image_path)
+        return None
+
+    def process_clip(clip, scale_factor):
+        resized_images = []
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(resize_image, image_path, scale_factor) for image_path in clip]
+            for future in as_completed(futures):
+                result = future.result()
+                if result is not None:
+                    resized_images.append(result)
+        return resized_images
+    resized_clips = [process_clip(clip, scale_factor) for clip in clips]
+    return resized_clips
+
+def process_images(batch_imgs):
+    images = []
+    for img in batch_imgs:
+        if img is None:
+            images.append(None)
+            continue
+        image = cv2.imread(img.url)
+        face = Image.fromarray(image)
+        images.append(np.array(face))
+    return images
+
 def extract_frames(video_path, output_base_folder="processed-videos", desired_fps=6):
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     video_folder = os.path.join(output_base_folder, video_name)
@@ -272,7 +290,7 @@ def get_max_clips(video_duration, min_value=3, max_value=10):
     # ['0:3', '60:3', '300:3', '600:3', '1200:3', '1800:4', '2400:5', '3000:6', '3600:6', '4200:7', '4800:8', '5400:10']
     return int(result)
 
-def sort_faces(video_folder, batch_size=128, scale_factor=0.15):  # video_folder = processed-videos/video
+def sort_faces(video_folder, batch_size=256, scale_factor=0.15):  # video_folder = processed-videos/video
     all_imgs = {}
     detector = RetinaFace(gpu_id=0)
     pickle_path = os.path.join(video_folder, 'tracks.pkl')
@@ -367,86 +385,162 @@ def filter_tracks(tracks, extracted_fps, min_duration=4, max_duration=300):
 
     return new_tracks
 
-def verify_faces(tracks, all_images, video_folder, threshold=1.24, min_frames=100, batch_size=64):
+def detect_occlusion(clips, image_data, extracted_fps, object_path):
+    updated_clips = {}
+    occ_model = torch.hub.load("ultralytics/yolov5", "yolov5s")
+    for key, clip in clips.items():
+        start = 0
+        for i in range(len(clip)):
+            image = clip[i]
+            if image is not None:
+                x1, x2, y1, y2, url = image.x1, image.x2, image.y1, image.y2, image.url
+                frame = cv2.imread(url)
+                if frame is None: continue
+                width = x2 - x1
+                height = y2 - y1
+                x1 -= int(0.30 * width)
+                x2 += int(0.30 * width)
+                y1 -= int(0.20 * height)
+                y2 += int(0.50 * height)
+                occluded = False
+                cropped_image = frame[y1:y2, x1:x2]
+                new_dimensions = (576, 324)
+                is_empty = all(len(lst) == 0 for lst in cropped_image)
+                if is_empty: continue
+                frame = cv2.resize(cropped_image, new_dimensions)
+                objects = detect_objects(occ_model, frame)
+                for label, xmin, ymin, xmax, ymax, confidence, class_id in objects:
+                    if label == 'person': 
+                        continue
+                    cv2.rectangle(frame, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (255, 0, 0), 2)
+                    if xmin < x2 and xmax > x1 and ymin < y2 and ymax > y1:
+                        occluded = True
+                        # if i - start >= extracted_fps * 4:
+                        #     updated_clips.append(clip[start: i])
+                        # start = i + 1
+                # cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+                if occluded: cv2.imwrite(os.path.join(object_path, f"clip_{extract_frame_number(url)}.jpg"), frame)
+        if not occluded: updated_clips[key] = clip
+        # if (len(clip) - start > extracted_fps * 4): updated_clips.append(clip[start:])
+    return updated_clips
+
+def verify_faces(tracks, all_images, video_folder, threshold=1.24, min_frames=100, batch_size=256):
+    def calculate_embeddings(images):
+        features = []
+        for image in images:
+            if image is None:
+                features.append(None)
+                continue
+            embedding = DeepFace.represent(
+                img_path=image,
+                model_name='ArcFace',
+                enforce_detection=False,
+                detector_backend='skip'
+            )
+            features.append(embedding)
+        return features
+
     pickle_path = os.path.join(video_folder, 'updated_tracks.pkl')
     if os.path.exists(pickle_path):
         return load_tracks(pickle_path)
     updated_tracks = []
-    for track_num, track in tracks.items():
-        no_img = 0
-        prefix = extract_prefix(track[0].url)
-        min_frame = extract_frame_number(track[0].url)
-        max_frame = extract_frame_number(track[-1].url)
-        if len(track) < 0.3 * (max_frame - min_frame): # skip track if 30% or less of clip meets bounding box requirement
-            # print(f"TRACK OF LENGTH {max_frame - min_frame} SKIPPED")
-            continue
-        else: # fill in missing frames of clip
-            # print(f"Length - Range | {len(track)} {max_frame - min_frame}")
-            filled_track = [all_images[construct_frame_url(prefix, i)] for i in range(min_frame, max_frame + 1)]
-            track = filled_track
-            tracks[track_num] = filled_track
-        features = []
-        for i in range(0, len(track), batch_size):
-            batch_imgs = track[i:i + batch_size]
-            images = []
-            for img in batch_imgs:
-                if img is None:
-                    images.append(None)
-                    no_img += 1
-                    # print(f"NO IMAGE {no_img}")
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        for track_num, track in tracks.items():
+            no_img = 0
+            prefix = os.path.dirname(track[0].url)
+            min_frame = extract_frame_number(track[0].url)
+            max_frame = extract_frame_number(track[-1].url)
+            if len(track) < 0.3 * (max_frame - min_frame) or max_frame - min_frame < min_frames:  # skip track if 30% or less of clip meets bounding box requirement
+                continue
+            else:  # fill in missing frames of clip
+                filled_track = [all_images[construct_frame_url(prefix, i)] for i in range(min_frame, max_frame + 1)]
+                track = filled_track
+                tracks[track_num] = filled_track
+
+            features = []
+            for i in range(0, len(track), batch_size):
+                batch_imgs = track[i:i + batch_size]
+                images = list(executor.submit(process_images, batch_imgs).result())
+                if not images:
                     continue
-                image = cv2.imread(img.url)
-                face = Image.fromarray(image)
-                images.append(np.array(face))
-            if not images:
-                continue
-            try:
-                start_time = time.time()
-                for image in images:
-                    if image is None:
-                        features.append(None)
-                        continue
-                    embedding = DeepFace.represent(
-                        img_path=image,
-                        model_name='ArcFace',
-                        enforce_detection=False,
-                        detector_backend='skip'
-                    )
-                    features.append(embedding)
-                end_time = time.time()
-                calc_time = end_time - start_time
-                # print(f"ArcFace Processing Time: {calc_time:.2f} seconds")
-            except Exception as e:
-                print(f"Error processing images: {e}")
-                continue
+                try:
+                    start_time = time.time()
+                    batch_features = list(executor.submit(calculate_embeddings, images).result())
+                    features.extend(batch_features)
+                    end_time = time.time()
+                    calc_time = end_time - start_time
+                    # print(f"ArcFace Processing Time: {calc_time:.2f} seconds")
+                except Exception as e:
+                    print(f"Error processing images: {e}")
+                    continue
 
-        current_id = [track[0]]  # jpgs of same identity
-        # print("LENGTH", len(features), len(track))
-        for i in range(1, len(features)):
-            if features[i] is None or features[i - 1] is None:
-                if len(current_id) >= min_frames: updated_tracks.append(current_id)
-                current_id = []  # new identity track
-                continue
+            current_id = [track[0]]  # jpgs of same identity
+            for i in range(1, len(features)):
+                if features[i] is None or features[i - 1] is None:
+                    if len(current_id) >= min_frames:
+                        updated_tracks.append(current_id)
+                    current_id = []  # new identity track
+                    continue
 
-            sim = l2_similarity(np.array(features[i - 1][0].get('embedding')), np.array(features[i][0].get('embedding')))
-            print(sim, extract_frame_number(track[i - 1].url), extract_frame_number(track[i].url))
-            if sim > threshold:
-                # print(f"ARCFACE SPLIT: {track[i - 1].url} - {track[i].url}")
-                if len(current_id) >= min_frames: updated_tracks.append(current_id)
-                current_id = [track[i]]  # new identity track
-            else:
-                current_id.append(track[i])
-        if len(current_id) > min_frames: updated_tracks.append(current_id)
+                sim = l2_similarity(np.array(features[i - 1][0].get('embedding')), np.array(features[i][0].get('embedding')))
+                if sim > threshold:
+                    if len(current_id) >= min_frames:
+                        updated_tracks.append(current_id)
+                    current_id = [track[i]]  # new identity track
+                else:
+                    current_id.append(track[i])
+            if len(current_id) > min_frames:
+                updated_tracks.append(current_id)
+
     save_tracks(updated_tracks, pickle_path)
     return updated_tracks
 
-def assess_clips(tracks, video_folder, frame_threshold=42, clip_threshold=45, alpha=0.5, beta=0.2, hyper_batch_size=64):
+def detect_cuts(tracks, extracted_fps):
+    model = TransNetV2()
+    clips = []
+    def process_track(track):
+        frames = []
+        for image in track:
+            img = cv2.imread(image.url)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = cv2.resize(img, (48, 27))
+            frames.append(img)
+        frames = np.array(frames)
+        single_frame_predictions, all_frame_predictions = model.predict_frames(frames)
+        threshold = 0.5
+        cut_indices = np.where(all_frame_predictions > threshold)[0]
+        clip_list = []
+        if len(cut_indices) == 0:
+            clip_list.append(track)
+        else:
+            start_idx = 0
+            for cut_idx in cut_indices:
+                clip = track[start_idx:cut_idx + 1]
+                if len(clip) >= extracted_fps * 4:
+                    clip_list.append(clip)
+                start_idx = cut_idx + 1
+            if start_idx < len(track):
+                if len(track[start_idx:]) >= extracted_fps * 4:
+                    clip_list.append(track[start_idx:])
+        return clip_list
+
+    with ThreadPoolExecutor(max_workers=4) as executor:  # Adjust the number of workers as needed
+        future_to_track = {executor.submit(process_track, track): track for track in tracks}
+        for future in future_to_track:
+            try:
+                result = future.result()
+                clips.extend(result)
+            except Exception as e:
+                print(f"Error processing track: {e}")
+    return clips
+
+def assess_clips(tracks, video_folder, frame_threshold=42, clip_threshold=45, alpha=0.5, beta=0.2, hyper_batch_size=8):
     pickle_path = os.path.join(video_folder, 'urls.pkl')
-    if os.path.exists(pickle_path):
-        return load_tracks(pickle_path)
+    # if os.path.exists(pickle_path):
+    #     return load_tracks(pickle_path)
     final_clips = []
-    fa = face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_D, device='cuda' if torch.cuda.is_available() else 'cpu', flip_input=False)
-    model_hyper = models.HyperNet(16, 112, 224, 112, 56, 28, 14, 7)
+    fa = face_alignment.FaceAlignment(face_alignment.LandmarksType.THREE_D, device='cuda' if torch.cuda.is_available() else 'cpu', flip_input=False)
+    model_hyper = hyperIQA_models.HyperNet(16, 112, 224, 112, 56, 28, 14, 7)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_hyper = model_hyper.to(device)
     model_hyper.train(False)
@@ -479,7 +573,7 @@ def assess_clips(tracks, video_folder, frame_threshold=42, clip_threshold=45, al
                 image = image.to(device).unsqueeze(0)
                 paras = model_hyper(image)
                 # Building target network
-                model_target = models.TargetNet(paras).to(device)
+                model_target = hyperIQA_models.TargetNet(paras).to(device)
                 for param in model_target.parameters():
                     param.requires_grad = False
                 # Quality prediction
@@ -494,7 +588,7 @@ def assess_clips(tracks, video_folder, frame_threshold=42, clip_threshold=45, al
             track_items += 1
             if score < 0:
                 low_score_count += 3
-            elif score < frame_threshold or score < 0: # count consecutive subpar frames
+            elif score < frame_threshold: # count consecutive subpar frames
                 low_score_count += 1
                 track_buffer += score
             else:
@@ -524,41 +618,65 @@ def assess_clips(tracks, video_folder, frame_threshold=42, clip_threshold=45, al
                 m_clip = calculate_motion(landmarks)
                 clip_score = alpha * clip_score + beta * m_clip
                 final_clips.append((clip_score, urls))
+                landmark_path = os.path.join(video_folder, 'landmarks')
+                os.makedirs(landmark_path, exist_ok=True)
+                visualize_landmarks(imgs, landmarks, landmark_path)
+                # Visualize landmarks
+                # for img, landmark, occluded in zip(imgs, landmarks, occluded_faces):
+                    # if img is not None and landmark is not None:
+                    #     loaded_image = cv2.imread(img.url)
+                    #     visualize_landmarks(loaded_image, landmark)
+
     final_clips = sorted(final_clips, key=lambda x: x[0], reverse=True)
     final_urls = [url for score, url in final_clips]
     print(f"NUMBER OF FINAL TRACKS: {len(final_urls)}")
     save_tracks(final_urls, pickle_path)
     return final_urls
 
-def analyze_traits(clips, video_name):
+def analyze_traits(clips, video_name, all_images):
     total_start = time.time()
-    images = [cv2.imread(clip[0]) for clip in clips]
+    boxes = []
+    for clip in clips:
+        frame = extract_frame_number(clip[0])
+        print(frame)
+        image_info = all_images[clip[0]]
+        frame_path, x1, x2, y1, y2 = image_info.url, image_info.x1, image_info.x2, image_info.y1, image_info.y2
+        image = cv2.imread(frame_path)
+        cropped_image = image[y1:y2, x1:x2]
+        
+        boxes.append(cropped_image)
+        
+        cv2.imwrite(f"temp_{frame}", cropped_image)
+
+    if len(boxes) == 0: return
     age, gender, race = [], [], []
-    for image in images:
-        # print(clip)
+    for image in boxes:
         start = time.time()
         objs = DeepFace.analyze(
             img_path = image,
-            actions = ['age', 'gender', 'race']
+            actions = ['age', 'gender', 'race'],
+            enforce_detection=False
         )
         end = time.time()
         print("CLIP ANALYZE TIME:", end - start)
         age.append(objs[0]['age'])
         gender.append(objs[0]['dominant_gender'])
         race.append(objs[0]['dominant_race'])
-        return objs
-    update_status()
+    age = np.mean(age)
+    gender = mode(gender)
+    race = mode(race)
+    print(age, gender, race)
+    update_traits(video_name, age, gender, race)
     print("Total analyzing time:", time.time() - total_start)
 
 def clips_to_videos(clips, extracted_fps, actual_fps, video_url, video_duration, output_base_path, video_name):
     clip_duration = 0
     # clips = [[clip1 jpgs], [clip2 jpgs], [clip3 jpgs], . . . ]
-    video_name = os.path.basename(video_url).split('.')[0]
-    video_output_folder = os.path.join(output_base_path, video_name)
+    video_output_folder = os.path.join(output_base_path, video_name, 'final-clips')
     os.makedirs(video_output_folder, exist_ok=True)
-    if len(os.listdir(video_output_folder)) == len(clips):
-        print("CLIPS ALREADY DOWNLOADED")
-        return
+    # if len(os.listdir(video_output_folder)) == len(clips):
+    #     print("CLIPS ALREADY DOWNLOADED")
+    #     return
     for i, clip in enumerate(clips):
         frame_numbers = [extract_frame_number(url) for url in clip]
         if not frame_numbers:
@@ -570,18 +688,12 @@ def clips_to_videos(clips, extracted_fps, actual_fps, video_url, video_duration,
         end_time = min(end_frame / extracted_fps, video_duration)
         clip_duration += end_time - start_time
         
-        start_time = find_nearest_keyframe(video_url, start_time, True) # forward = True
-        end_time = find_nearest_keyframe(video_url, end_time, False) # forward = False
-
-        print(start_time)
-        print(end_time)
-        
         print(f"[START TIME, END TIME] = [{start_time}, {end_time}]")
         output_path = os.path.join(video_output_folder, f"{video_name}_clip{i}.mp4")
 
         command = (
-            f'ffmpeg -y -ss {start_time} -i "{video_url}" -t {end_time} '
-            f'-c copy -copyts "{output_path}"'
+            f'ffmpeg -y  -ss {start_time} -i "{video_url}" -to {end_time - start_time} '
+            f'-c copy -copyinkf  "{output_path}"'
         )
 
         print(f"Running command: {command}")
@@ -601,6 +713,7 @@ def main(video_path):
     print(f"Extract Frame Time: {extract_end - extract_start:2f}")
     update_status('stats.json', video_name, 'video_duration', video_duration)
     
+    
     # Stage 2 - RetinaFace + SORT
     sort_start = time.time()
     tracks, all_images = sort_faces(proc_video_folder)
@@ -611,6 +724,16 @@ def main(video_path):
     update_status('stats.json', video_name, 'stage_2', stage2_clips)
     print(f"\n{stage2_clips} clips after stage 2\n")
     
+    # Stage 2.5 - Face Occlusion Detection
+    object_path = os.path.join('processed-videos', video_name, 'objects')
+    occlusion_start = time.time()
+    filtered_tracks = detect_occlusion(filtered_tracks, all_images, extracted_fps, object_path)
+    occlusion_end = time.time()
+    print(f"Face Occlusion Detection Time: {occlusion_end - occlusion_start}")
+    stage2_5_clips = len(filtered_tracks)
+    update_status('stats.json', video_name, 'stage_2.5', stage2_5_clips)
+    print(f"\n{stage2_5_clips} clips after stage 2.5\n")
+    
     # Stage 3 - ArcFace
     verify_start = time.time()
     updated_tracks = verify_faces(filtered_tracks, all_images, proc_video_folder, min_frames=4 * extracted_fps)
@@ -619,6 +742,15 @@ def main(video_path):
     stage3_clips = len(updated_tracks)
     update_status('stats.json', video_name, 'stage_3', stage3_clips)
     print(f"\n{stage3_clips} clips after stage 3\n")
+    
+    # Stage 3.5 - Cut Detection
+    cut_start = time.time()
+    updated_tracks = detect_cuts(updated_tracks, extracted_fps)
+    cut_end = time.time()
+    print(f"Cut Detection Time: {cut_end - cut_start}")
+    stage3_5_clips = len(updated_tracks)
+    update_status('stats.json', video_name, 'stage_3.5', stage3_5_clips)
+    print(f"\n{stage3_5_clips} clips after stage 3.5\n")
     
     # Stage 4 - HyperIQA + Landmark Motion Tracking
     iqa_start = time.time()
@@ -632,12 +764,11 @@ def main(video_path):
     update_status('stats.json', video_name, 'final_clips', len(top_clips))
     print(f"\n{stage4_clips} clips after stage 4\n")
     
-    del proc_video_folder, tracks, all_images, filtered_tracks, updated_tracks, final_clips
+    del proc_video_folder, tracks, filtered_tracks, updated_tracks, final_clips
     gc.collect()
-    
-    analyze_traits(top_clips, video_name)
+    # analyze_traits(top_clips, video_name, all_images)
     clip_start = time.time()
-    clips_to_videos(top_clips, extracted_fps, original_fps, video_path, video_duration, "final-clips", video_name)
+    clips_to_videos(top_clips, extracted_fps, original_fps, video_path, video_duration, "processed-videos", video_name)
     clip_end = time.time()
     print(f"Extract Frame Time: {extract_end - extract_start:2f}")
     print(f"Bounding Boxes + Sort Time: {sort_end - sort_start:2f}")
@@ -657,7 +788,7 @@ def process_directory(videos_dir='videos', processed_videos_dir='processed-video
 
 # main("videos/Scarlett Johansson on Being a Movie Star vs. Being an Actor ｜ W Magazine.mp4")
 # main("videos/DRAKE： Sundae Conversation with Caleb Pressley.mp4")
-main("videos/Does Emily Blunt Know Her Lines From Her Most Famous Movies？.mp4")
+# main("videos/Does Emily Blunt Know Her Lines From Her Most Famous Movies？.mp4")
 # main("videos/THE GARFIELD MOVIE interviews with Chris Pratt, Samuel L Jackson, Jim Davis, director Mark Dindal 4K.mp4")
 # main("videos/Open Thoughts with Kevin Hart.mp4")
 # main('videos/Lilly Singh Fears for Her Life While Eating Spicy Wings ｜ Hot Ones.mp4')
@@ -665,4 +796,21 @@ main("videos/Does Emily Blunt Know Her Lines From Her Most Famous Movies？.mp4"
 # main('videos/A Smith Family Therapy Session ｜ Best Shape of My Life.mp4')
 # main('videos/Why YouTube\'s Biggest Star Quit (Liza Koshy interview).mp4')
 # main('videos/We Appraised JAY LENO\'s Car Collection (185 cars!).mp4')
+# main('videos/The Dark Season - Justin Bieber： Seasons.mp4')
+# main('videos/4K Video ｜ Hugh Jackman,Sigourney Weaver in Berlin ｜ Fan Event Chappie.mp4')
+# main('videos/How Is Shane Dawson Allowed to be a Father？.mp4')
 # process_directory()
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Process videos for face detection and analysis.")
+    parser.add_argument("--file", type=str, help="Path to the video file to process.")
+    parser.add_argument("--directory", type=str, help="Path to the directory containing video files to process.")
+
+    args = parser.parse_args()
+
+    if args.file:
+        main(args.file)
+    elif args.directory:
+        process_directory(videos_dir=args.directory)
+    else:
+        print("Please provide a file or directory to process using --file or --directory.")
